@@ -1,8 +1,14 @@
 import React, { useEffect } from 'react';
-import { SafeAreaView, Text, Button, StyleSheet, Alert } from 'react-native';
+import { SafeAreaView, Text, StyleSheet } from 'react-native';
 import GoMarketMe from 'gomarketme-react-native';
 
-const App: React.FC = () => {
+// Note:
+// Make sure your app's `package.json` depends on `@react-native-async-storage/async-storage` 
+// and other dependencies that 'gomarketme-react-native' has.
+// CLI only autolinks native modules found in your app's `package.json`.
+
+const App = () => {
+
   useEffect(() => {
     const initializeGoMarketMe = async () => {
       const apiKey = 'YOUR_API_KEY_HERE';
@@ -19,7 +25,7 @@ const App: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Test GoMarketMe Package</Text>
+      <Text style={styles.text}>Hi, there!9</Text>
     </SafeAreaView>
   );
 };
@@ -29,12 +35,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5FCFF',
+    backgroundColor: '#f0f0f0',
   },
-  title: {
-    fontSize: 20,
-    textAlign: 'center',
-    margin: 10,
+  text: {
+    fontSize: 32,
+    color: '#333',
   },
 });
 
