@@ -1509,7 +1509,7 @@ PODS:
     - React-logger (= 0.76.1)
     - React-perflogger (= 0.76.1)
     - React-utils (= 0.76.1)
-  - RNCAsyncStorage (1.24.0):
+  - RNCAsyncStorage (2.0.0):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -1809,7 +1809,7 @@ SPEC CHECKSUMS:
   React-utils: 5362bd16a9563f9916e7a56c011ddc533507650f
   ReactCodegen: 865bafc5c17ec2181620ced1a32c39c38ab2951d
   ReactCommon: 422e364463f33e336fc4db196aeb50fd801d90d6
-  RNCAsyncStorage: 3ad840f7b17b45ca7ebbbb0e80948564a9513315
+  RNCAsyncStorage: 597673c6086d359029afefef8fd5859f1f35ab87
   RNDeviceInfo: 6192a9c9167e256803e554038b22b3b2b40163dc
   RNIap: d248609d1b8937e63bd904e865c318e9b1457eff
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
@@ -1817,4 +1817,4 @@ SPEC CHECKSUMS:
 
 PODFILE CHECKSUM: f60744d13f18311845d5c03983fc99f47802eedc
 
-COCOAPODS: 1.16.2
+COCOAPODS: 1.16.1

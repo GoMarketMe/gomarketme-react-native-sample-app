@@ -25,7 +25,7 @@ const App = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.text}>Hi, there!9</Text>
+      <Text style={styles.text}>Hi, there! 1.1.1</Text>
     </SafeAreaView>
   );
 };

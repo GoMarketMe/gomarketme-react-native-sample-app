@@ -13,7 +13,7 @@
     "@react-native-async-storage/async-storage": "^2.0.0",
     "axios": "^0.21.1",
     "get-user-locale": "^2.3.2",
-    "gomarketme-react-native": "^1.1.0",
+    "gomarketme-react-native": "^1.1.1",
     "react": "18.3.1",
     "react-native": "0.76.1",
     "react-native-device-info": "^14.0.0",
