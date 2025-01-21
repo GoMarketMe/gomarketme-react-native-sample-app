@@ -1,0 +1,28 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Debug Android",
+        "request": "launch",
+        "type": "reactnative",
+        "program": "${workspaceFolder}/index.js",
+        "platform": "android",
+        "sourceMaps": true
+      },
+      {
+        "name": "Debug iOS",
+        "request": "launch",
+        "type": "reactnative",
+        "program": "${workspaceFolder}/index.js",
+        "platform": "ios",
+        "sourceMaps": true
+      },
+      {
+        "name": "Attach to Metro",
+        "request": "attach",
+        "type": "reactnative",
+        "port": 8081
+      }
+    ]
+  }
+  

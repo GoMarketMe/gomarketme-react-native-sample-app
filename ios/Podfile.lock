@@ -1532,8 +1532,12 @@ PODS:
     - Yoga
   - RNDeviceInfo (14.0.0):
     - React-Core
-  - RNIap (7.5.6):
+  - RNIap (12.16.0):
+    - RCT-Folly
+    - RCTRequired
+    - RCTTypeSafety
     - React-Core
+    - ReactCommon/turbomodule/core
   - SocketRocket (0.7.1)
   - Yoga (0.0.0)
 
@@ -1811,10 +1815,10 @@ SPEC CHECKSUMS:
   ReactCommon: 422e364463f33e336fc4db196aeb50fd801d90d6
   RNCAsyncStorage: 597673c6086d359029afefef8fd5859f1f35ab87
   RNDeviceInfo: 6192a9c9167e256803e554038b22b3b2b40163dc
-  RNIap: d248609d1b8937e63bd904e865c318e9b1457eff
+  RNIap: 2c3c65e445757dde21e566faa13984786d23fab1
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   Yoga: db69236006b8b1c6d55ab453390c882306cbf219
 
 PODFILE CHECKSUM: f60744d13f18311845d5c03983fc99f47802eedc
 
-COCOAPODS: 1.16.1
+COCOAPODS: 1.16.2

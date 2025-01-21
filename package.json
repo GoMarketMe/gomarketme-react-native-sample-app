@@ -13,11 +13,11 @@
     "@react-native-async-storage/async-storage": "^2.0.0",
     "axios": "^0.21.1",
     "get-user-locale": "^2.3.2",
-    "gomarketme-react-native": "^1.1.1",
+    "gomarketme-react-native": "^2.0.0",
     "react": "18.3.1",
     "react-native": "0.76.1",
     "react-native-device-info": "^14.0.0",
-    "react-native-iap": "^7.0.0"
+    "react-native-iap": "^12.16.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
