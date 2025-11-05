@@ -83,3 +83,6 @@ ios/Pods.zip
 **/xcuserdata/*
 **/*.xcworkspace/xcuserdata/*
 
+
+android/my-release-key.jks
+

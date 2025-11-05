@@ -1,45 +1,53 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+
 import java.util.Properties
 
 /**
- * This is the configuration block to customize your React Native Android app.
- * Uncomment the lines you need to customize.
+ * React Native Android configuration
+ * Hermes + Nitro (New Architecture) enabled
+ * Works with react-native-iap >=14.4.15
  */
 react {
-    /* Autolinking */
+    // Automatically link native modules
     autolinkLibrariesWithApp()
+
+    // ✅ Keep Hermes on
+    hermesEnabled = true
+
+    // ✅ Enable Nitro / New Architecture
+    newArchEnabled = true
 }
 
 /**
- * Enable or disable Proguard for Release builds.
+ * Run Proguard on Release builds to minify Java bytecode.
  */
 def enableProguardInReleaseBuilds = false
 
 /**
- * The preferred build flavor of JavaScriptCore (JSC).
- * You can customize it if needed.
+ * JSC flavor (used only if Hermes is off)
  */
-def jscFlavor = 'org.webkit:android-jsc:+'
+def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
+    namespace "com.reactnativesdksampleapp"
+
     compileSdk rootProject.ext.compileSdkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     ndkVersion rootProject.ext.ndkVersion
 
-    namespace "com.reactnativesdksampleapp"
     defaultConfig {
         applicationId "com.reactnativesdksampleapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
-        missingDimensionStrategy "store", "play"
     }
+
     signingConfigs {
         release {
-            // Load properties from local.properties
+            // Load signing info from local.properties
             def localProperties = new Properties()
             def localPropertiesFile = rootProject.file("local.properties")
             if (localPropertiesFile.exists()) {
@@ -48,30 +56,39 @@ android {
                 }
             }
 
-            storeFile = localProperties.getProperty("storeFile") ? file(localProperties.getProperty("storeFile")) : null
-            storePassword = localProperties.getProperty("storePassword")
-            keyAlias = localProperties.getProperty("keyAlias")
-            keyPassword = localProperties.getProperty("keyPassword")
+            // NOTE: Keystore lives in /android
+            def keystorePath = localProperties.getProperty("storeFile") ?: "my-release-key.jks"
+            storeFile file(keystorePath)
+            storePassword localProperties.getProperty("storePassword")
+            keyAlias localProperties.getProperty("keyAlias")
+            keyPassword localProperties.getProperty("keyPassword")
         }
     }
+
     buildTypes {
         debug {
-            signingConfig signingConfigs.debug
+            // ✅ Use release key for debug builds too (enables IAPs)
+            signingConfig signingConfigs.release
         }
         release {
             signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+    }
+
+    // ✅ Fixes Hermes + Nitro crash (classloader issue)
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 }
 
 dependencies {
+    // React Native core runtime
     implementation("com.facebook.react:react-android")
 
-    if (hermesEnabled.toBoolean()) {
-        implementation("com.facebook.react:hermes-android")
-    } else {
-        implementation(jscFlavor)
-    }
+    // ✅ Explicitly include Hermes to avoid “Unable to load Hermes” crash
+    implementation("com.facebook.react:hermes-android")
 }
