@@ -12,7 +12,7 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "^1.24.0",
     "@react-native/new-app-screen": "0.81.4",
-    "gomarketme-react-native": "^4.0.0",
+    "gomarketme-react-native": "^4.0.1",
     "react": "19.1.0",
     "react-native": "^0.81.4",
     "react-native-device-info": "^11.1.0",
