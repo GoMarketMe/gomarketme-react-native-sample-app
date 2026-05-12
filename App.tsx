@@ -19,13 +19,12 @@ import {
   endConnection,
   getAvailablePurchases,
   type Product,
-  type Purchase,
   type PurchaseError,
 } from "react-native-iap";
 
 import GoMarketMe, { GoMarketMeAffiliateMarketingData } from "gomarketme-react-native";
 
-const PRODUCT_IDS = ["ProductID4"]; //["ReactNativeSubscription1"] (iOS); //product1 (Android)
+const PRODUCT_IDS = ["ReactNativeSubscription1"] //["ProductID4"]; // ["ReactNativeSubscription1"] on Android
 
 const App = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -36,7 +35,11 @@ const App = () => {
   // Basic Integration
 
   useEffect(() => {
-    GoMarketMe.initialize('API_KEY'); // Initialize with your API key
+    const initializeGoMarketMe = async () => {
+      await GoMarketMe.initialize('API_KEY'); // Initialize with your API key
+    };
+
+    initializeGoMarketMe();
   }, []);
 
 
@@ -67,55 +70,55 @@ const App = () => {
   //   initGoMarketMe();
   // }, []);
 
-  // 
-
 
   useEffect(() => {
     let purchaseUpdateSub: any;
     let purchaseErrorSub: any;
 
-    const initIap = async () => {
+    const init = async () => {
       try {
+
         console.log("🧩 Initializing IAP connection...");
         const connected = await initConnection();
         console.log("✅ IAP connected:", connected);
 
-        // --- List any existing purchases ---
         const purchases = await getAvailablePurchases();
         console.log("🧾 Existing purchases:", purchases);
 
-        // --- Listeners ---
-        purchaseUpdateSub = purchaseUpdatedListener(
-          async (purchase: Purchase) => {
-            console.log("purchaseUpdatedListener:", purchase);
-            if (purchase.purchaseToken) {
-              try {
-                await finishTransaction({ purchase, isConsumable: true });
-                console.log("✅ finishTransaction completed:", purchase.productId);
-                setIsPurchased(true);
-              } catch (finishErr) {
-                console.error("finishTransaction error:", finishErr);
-              }
-            }
+        purchaseUpdateSub = purchaseUpdatedListener(async purchase => {
+          console.log("purchaseUpdatedListener:", purchase);
+
+          try {
+            const syncResult = await GoMarketMe.syncAllTransactions();  // Sync the transactions
+            console.log("GoMarketMe syncAllTransactions result:", syncResult);
+          } catch (syncError) {
+            console.error("GoMarketMe syncAllTransactions error:", syncError);
           }
-        );
+
+          try {
+            await finishTransaction({ purchase, isConsumable: true });
+            console.log("finishTransaction completed:", purchase.productId);
+            setIsPurchased(true);
+          } catch (finishError) {
+            console.error("finishTransaction error:", finishError);
+          }
+        });
 
         purchaseErrorSub = purchaseErrorListener((error: PurchaseError) => {
           console.warn("purchaseErrorListener:", error);
           Alert.alert("Purchase Error", error.message);
         });
 
-        // --- Fetch products ---
         const items = await fetchProducts({ skus: PRODUCT_IDS });
         console.log("✅ fetched products:", items);
-        setProducts(items ?? []);
+        setProducts((items as any) ?? []);
       } catch (err) {
-        console.error("❌ IAP init error:", err);
-        Alert.alert("IAP Error", "Failed to initialize In-App Purchases.");
+        console.error("❌ init error:", err);
+        Alert.alert("Initialization Error", "Failed to initialize the sample app.");
       }
     };
 
-    initIap();
+    init();
 
     return () => {
       purchaseUpdateSub?.remove();
@@ -131,16 +134,17 @@ const App = () => {
     }
 
     setIsLoading(true);
+
     try {
       console.log("🛒 requestPurchase:", PRODUCT_IDS[0]);
+
       await requestPurchase({
         request: {
           ios: { sku: PRODUCT_IDS[0], quantity: 1 },
           android: { skus: [PRODUCT_IDS[0]] },
         },
-        type: 'in-app',
+        type: "in-app",
       });
-
     } catch (err: any) {
       console.error("❌ requestPurchase error:", err);
       Alert.alert("Error", err.message ?? "Purchase failed.");
@@ -151,14 +155,15 @@ const App = () => {
 
   const redeemOfferCode = () => {
     const redemptionURL = `https://apps.apple.com/redeem/?ctx=offercodes&id=1234&code=${offerCode}`;
-    Linking.openURL(redemptionURL).catch((err) =>
+
+    Linking.openURL(redemptionURL).catch(err =>
       console.error("Failed to open URL:", err)
     );
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Sample React Native App</Text>
+      <Text style={styles.title}>Sample React Native App 5.0.0</Text>
 
       {products.length > 0 ? (
         <TouchableOpacity
@@ -206,7 +211,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 10,
   },
-  disabledButton: { opacity: 0.6 },
+  disabledButton: {
+    opacity: 0.6,
+  },
   buttonText: {
     fontSize: 18,
     color: "#FFF",

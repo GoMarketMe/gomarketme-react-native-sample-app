@@ -49,5 +49,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>SKIncludeConsumableInAppPurchaseHistory</key>
+	<true/>
 </dict>
 </plist>
