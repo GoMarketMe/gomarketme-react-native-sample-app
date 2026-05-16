@@ -1,6 +1,6 @@
 {
   "name": "ReactNativeSDKSampleApp",
-  "version": "5.0.0",
+  "version": "5.0.4",
   "private": true,
   "scripts": {
     "android": "RCT_NEW_ARCH_ENABLED=1 react-native run-android",
@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@react-native/new-app-screen": "0.81.4",
-    "gomarketme-react-native": "^5.0.0",
+    "gomarketme-react-native": "^5.0.4",
     "react": "19.1.4",
     "react-native": "0.81.6",
     "react-native-iap": "^15.2.3",
