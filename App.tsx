@@ -1,230 +1,698 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from 'react';
 import {
-  Text,
-  StyleSheet,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
   Linking,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-  initConnection,
-  purchaseUpdatedListener,
-  purchaseErrorListener,
-  fetchProducts,
-  requestPurchase,
-  finishTransaction,
   endConnection,
+  fetchProducts,
+  finishTransaction,
   getAvailablePurchases,
+  initConnection,
+  purchaseErrorListener,
+  purchaseUpdatedListener,
+  requestPurchase,
   type Product,
   type PurchaseError,
-} from "react-native-iap";
+} from 'react-native-iap';
 
-import GoMarketMe, { GoMarketMeAffiliateMarketingData } from "gomarketme-react-native";
+import GoMarketMe, {
+  GoMarketMeAffiliateMarketingData,
+  GoMarketMeReferralCodeTrigger,
+} from 'gomarketme-react-native';
 
-const PRODUCT_IDS = ["ReactNativeSubscription1"] //["ProductID4"]; // ["ReactNativeSubscription1"] on Android
+const PRODUCT_IDS = ['ReactNativeSubscription1'];
+const APPLE_APP_ID = '1234';
+
+type MessageKind = 'info' | 'success' | 'error';
+type SampleMessage = { kind: MessageKind; text: string };
+type InitializationState = 'initializing' | 'ready' | 'error';
+
+const info = (text: string): SampleMessage => ({ kind: 'info', text });
+const success = (text: string): SampleMessage => ({ kind: 'success', text });
+const failure = (text: string): SampleMessage => ({ kind: 'error', text });
 
 const App = () => {
   const [products, setProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [affiliateData, setAffiliateData] =
+    useState<GoMarketMeAffiliateMarketingData | null>(null);
+  const [initializationState, setInitializationState] =
+    useState<InitializationState>('initializing');
+  const [initializationError, setInitializationError] = useState<string>();
+  const [iapReady, setIapReady] = useState(false);
+  const [isPurchasing, setIsPurchasing] = useState(false);
   const [isPurchased, setIsPurchased] = useState(false);
-  const [offerCode] = useState<string>("NO_OFFER_CODE_FOUND");
-
-  // Basic Integration
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<SampleMessage | null>(null);
+  const [purchaseMessage, setPurchaseMessage] = useState<SampleMessage | null>(
+    null,
+  );
+  const [referralMessage, setReferralMessage] = useState<SampleMessage | null>(
+    null,
+  );
 
   useEffect(() => {
+    let active = true;
+
     const initializeGoMarketMe = async () => {
-      await GoMarketMe.initialize('API_KEY'); // Initialize with your API key
+      await GoMarketMe.initialize('API_KEY');
+      if (!active) {
+        return;
+      }
+
+      if (!GoMarketMe.initialized) {
+        setInitializationState('error');
+        setInitializationError('GoMarketMe could not initialize.');
+        return;
+      }
+
+      setAffiliateData(GoMarketMe.affiliateMarketingData ?? null);
+      setInitializationState('ready');
     };
 
-    initializeGoMarketMe();
+    initializeGoMarketMe().catch(error => {
+      if (active) {
+        setInitializationState('error');
+        setInitializationError(String(error));
+      }
+    });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-
-  // Advanced Integration
-
-  // const goMarketMeSDK = GoMarketMe;
-  // const [affiliateData, setAffiliateData] = useState<GoMarketMeAffiliateMarketingData | null>(null);
-
-  // useEffect(() => {
-  //   const initGoMarketMe = async () => {
-  //     try {
-  //       await goMarketMeSDK.initialize('API_KEY'); // Initialize with your API key
-  //       const data = goMarketMeSDK.affiliateMarketingData;
-
-  //       if (data) { // user acquired through affiliate campaign
-  //         setAffiliateData(data);
-
-  //         console.log('Affiliate ID:', data.affiliate?.id);                          // maps to GoMarketMe > Affiliates > Export > id column
-  //         console.log('Affiliate %:', data.saleDistribution?.affiliatePercentage);   // maps to GoMarketMe > Campaigns > [Name] > Affiliate's Revenue Split (%)
-  //         console.log('Campaign ID:', data.campaign?.id);                            // maps to GoMarketMe > Campaigns > [Name] > id in the URL
-  //       }
-  //     } catch (error) {
-  //       console.error('Failed to initialize GoMarketMe:', error);
-  //       Alert.alert('Initialization Error', 'Could not initialize GoMarketMe SDK');
-  //     }
-  //   };
-
-  //   initGoMarketMe();
-  // }, []);
-
-
   useEffect(() => {
-    let purchaseUpdateSub: any;
-    let purchaseErrorSub: any;
+    let active = true;
+    let purchaseUpdateSubscription: { remove: () => void } | undefined;
+    let purchaseErrorSubscription: { remove: () => void } | undefined;
 
-    const init = async () => {
+    const initializePurchases = async () => {
       try {
+        await initConnection();
+        if (!active) {
+          return;
+        }
 
-        console.log("🧩 Initializing IAP connection...");
-        const connected = await initConnection();
-        console.log("✅ IAP connected:", connected);
+        setIapReady(true);
+        await getAvailablePurchases();
 
-        const purchases = await getAvailablePurchases();
-        console.log("🧾 Existing purchases:", purchases);
-
-        purchaseUpdateSub = purchaseUpdatedListener(async purchase => {
-          console.log("purchaseUpdatedListener:", purchase);
+        purchaseUpdateSubscription = purchaseUpdatedListener(async purchase => {
+          setIsPurchasing(true);
+          let synced = false;
 
           try {
-            const syncResult = await GoMarketMe.syncAllTransactions();  // Sync the transactions
-            console.log("GoMarketMe syncAllTransactions result:", syncResult);
-          } catch (syncError) {
-            console.error("GoMarketMe syncAllTransactions error:", syncError);
+            const result = await GoMarketMe.syncAllTransactions();
+            synced = result.success;
+          } catch (error) {
+            console.error('GoMarketMe purchase sync failed:', error);
           }
 
           try {
             await finishTransaction({ purchase, isConsumable: true });
-            console.log("finishTransaction completed:", purchase.productId);
             setIsPurchased(true);
-          } catch (finishError) {
-            console.error("finishTransaction error:", finishError);
+            setPurchaseMessage(
+              synced
+                ? success('Purchase completed and synced.')
+                : failure(
+                    'Purchase completed, but GoMarketMe sync needs attention.',
+                  ),
+            );
+          } catch (error) {
+            setPurchaseMessage(
+              failure(`Could not finish the transaction: ${String(error)}`),
+            );
+          } finally {
+            setIsPurchasing(false);
           }
         });
 
-        purchaseErrorSub = purchaseErrorListener((error: PurchaseError) => {
-          console.warn("purchaseErrorListener:", error);
-          Alert.alert("Purchase Error", error.message);
-        });
+        purchaseErrorSubscription = purchaseErrorListener(
+          (error: PurchaseError) => {
+            setIsPurchasing(false);
+            setPurchaseMessage(failure(error.message));
+          },
+        );
 
         const items = await fetchProducts({ skus: PRODUCT_IDS });
-        console.log("✅ fetched products:", items);
-        setProducts((items as any) ?? []);
-      } catch (err) {
-        console.error("❌ init error:", err);
-        Alert.alert("Initialization Error", "Failed to initialize the sample app.");
+        if (active) {
+          setProducts((items as Product[]) ?? []);
+          if (!items?.length) {
+            setPurchaseMessage(
+              info(`Test product not found: ${PRODUCT_IDS[0]}`),
+            );
+          }
+        }
+      } catch (error) {
+        if (active) {
+          setPurchaseMessage(
+            failure(`Purchase setup failed: ${String(error)}`),
+          );
+        }
       }
     };
 
-    init();
+    initializePurchases();
 
     return () => {
-      purchaseUpdateSub?.remove();
-      purchaseErrorSub?.remove();
+      active = false;
+      purchaseUpdateSubscription?.remove();
+      purchaseErrorSubscription?.remove();
       endConnection();
     };
   }, []);
 
-  const handlePurchase = async () => {
-    if (!products.length) {
-      Alert.alert("Unavailable", "No products available for purchase.");
+  const syncCurrentPurchases = async () => {
+    if (isSyncing) {
       return;
     }
 
-    setIsLoading(true);
-
+    setIsSyncing(true);
+    setSyncMessage(null);
     try {
-      console.log("🛒 requestPurchase:", PRODUCT_IDS[0]);
+      const result = await GoMarketMe.syncAllTransactions();
+      setSyncMessage(
+        result.success
+          ? success(
+              `Synced ${result.sentCount} of ${result.fetchedCount} transaction(s).`,
+            )
+          : failure(
+              `Sync did not complete. ${result.failedCount} transaction(s) failed.`,
+            ),
+      );
+    } catch (error) {
+      setSyncMessage(failure(`Purchase sync failed: ${String(error)}`));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
+  const handlePurchase = async () => {
+    if (!products.length) {
+      setPurchaseMessage(failure('No test product is available.'));
+      return;
+    }
+
+    setIsPurchasing(true);
+    setIsPurchased(false);
+    setPurchaseMessage(null);
+    try {
       await requestPurchase({
         request: {
           ios: { sku: PRODUCT_IDS[0], quantity: 1 },
           android: { skus: [PRODUCT_IDS[0]] },
         },
-        type: "in-app",
+        type: 'in-app',
       });
-    } catch (err: any) {
-      console.error("❌ requestPurchase error:", err);
-      Alert.alert("Error", err.message ?? "Purchase failed.");
-    } finally {
-      setIsLoading(false);
+    } catch (error: any) {
+      setIsPurchasing(false);
+      setPurchaseMessage(failure(error?.message ?? 'Purchase failed.'));
     }
   };
 
-  const redeemOfferCode = () => {
-    const redemptionURL = `https://apps.apple.com/redeem/?ctx=offercodes&id=1234&code=${offerCode}`;
+  const redeemOfferCode = async () => {
+    const code = nonEmpty(affiliateData?.offerCode);
+    const codeQuery = code ? `&code=${encodeURIComponent(code)}` : '';
+    const url =
+      `https://apps.apple.com/redeem/?ctx=offercodes&id=${APPLE_APP_ID}` +
+      codeQuery;
 
-    Linking.openURL(redemptionURL).catch(err =>
-      console.error("Failed to open URL:", err)
-    );
+    try {
+      await Linking.openURL(url);
+    } catch (error) {
+      Alert.alert('Apple offer code', String(error));
+    }
   };
 
+  const product = products[0];
+  const referralCode = nonEmpty(affiliateData?.referralCode);
+  const offerCode = nonEmpty(affiliateData?.offerCode);
+
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Sample React Native App 5.0.0</Text>
+    <SafeAreaView
+      edges={['top', 'right', 'bottom', 'left']}
+      style={styles.safeArea}
+    >
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>GoMarketMe React Native SDK</Text>
+          <Text style={styles.headerSubtitle}>
+            Sample integration · SDK 6.0.0
+          </Text>
+        </View>
 
-      {products.length > 0 ? (
-        <TouchableOpacity
-          style={[styles.button, isLoading && styles.disabledButton]}
-          onPress={handlePurchase}
-          disabled={isLoading}
+        <SampleSection
+          badge="Required"
+          title="Initialize"
+          description="Initialize once when your app starts. Affiliate-link attribution is handled automatically."
         >
-          {isLoading ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <Text style={styles.buttonText}>
-              {isPurchased
-                ? "Purchased!"
-                : `Buy ${products[0]?.title || PRODUCT_IDS[0]} (${products[0]?.displayPrice || ""})`}
-            </Text>
-          )}
-        </TouchableOpacity>
-      ) : (
-        <Text>No products available</Text>
-      )}
+          <View style={styles.statusRow}>
+            {initializationState === 'initializing' ? (
+              <ActivityIndicator color="#1677FF" />
+            ) : (
+              <Text
+                style={[
+                  styles.statusSymbol,
+                  initializationState === 'ready'
+                    ? styles.successText
+                    : styles.errorText,
+                ]}
+              >
+                {initializationState === 'ready' ? '✓' : '!'}
+              </Text>
+            )}
+            <View style={styles.statusCopy}>
+              <Text style={styles.statusTitle}>
+                {initializationState === 'initializing'
+                  ? 'Initializing GoMarketMe…'
+                  : initializationState === 'ready'
+                  ? 'SDK ready'
+                  : 'Initialization failed'}
+              </Text>
+              <Text style={styles.statusDetail}>
+                {initializationError ??
+                  (initializationState === 'ready'
+                    ? affiliateData
+                      ? 'Ready · attribution loaded'
+                      : 'Ready · no existing attribution'
+                    : "Calling GoMarketMe.initialize('API_KEY')")}
+              </Text>
+            </View>
+          </View>
+        </SampleSection>
 
-      <TouchableOpacity style={styles.linkButton} onPress={redeemOfferCode}>
-        <Text style={styles.linkText}>Redeem Offer Code: {offerCode}</Text>
-      </TouchableOpacity>
+        <SampleSection
+          badge="Optional"
+          title="Referral codes"
+          description="Referral codes are the fallback when an affiliate link is not practical. Place this UI on the first screen users see after installing the app."
+        >
+          <GoMarketMeReferralCodeTrigger
+            onResult={data => {
+              if (!data) {
+                return;
+              }
+              setAffiliateData(data);
+              const code = nonEmpty(data.referralCode);
+              setReferralMessage(
+                code
+                  ? success(`Referral code ${code} applied.`)
+                  : info(
+                      'This device is already attributed through an affiliate link.',
+                    ),
+              );
+            }}
+            onError={error => setReferralMessage(failure(String(error)))}
+          />
+          {referralMessage && <MessageView message={referralMessage} />}
+          <Text style={styles.hint}>
+            The trigger text, colors, typography, and layout are configured in
+            GoMarketMe.
+          </Text>
+        </SampleSection>
+
+        <SampleSection
+          badge="Recommended"
+          title="Report purchases"
+          description="GoMarketMe detects and reports purchases automatically. We also recommend manually syncing after your purchase provider confirms a successful transaction."
+        >
+          <PrimaryButton
+            label={isSyncing ? 'Syncing…' : 'Manually sync purchases'}
+            disabled={initializationState !== 'ready' || isSyncing}
+            loading={isSyncing}
+            onPress={syncCurrentPurchases}
+          />
+          {syncMessage && <MessageView message={syncMessage} />}
+
+          <View style={styles.divider} />
+          <Text style={styles.subsectionTitle}>In-app purchase test</Text>
+          <Text style={styles.hint}>
+            Uses the sample product {PRODUCT_IDS[0]}. After purchase, the sample
+            syncs with GoMarketMe before finishing the transaction.
+          </Text>
+          <SecondaryButton
+            label={
+              isPurchasing
+                ? 'Purchasing…'
+                : isPurchased
+                ? 'Purchased'
+                : product
+                ? `Buy ${product.title} (${product.displayPrice ?? ''})`
+                : 'Test product unavailable'
+            }
+            disabled={!iapReady || !product || isPurchasing}
+            onPress={handlePurchase}
+          />
+          {purchaseMessage && <MessageView message={purchaseMessage} />}
+        </SampleSection>
+
+        <SampleSection
+          badge="Optional"
+          title="Programmatic affiliate data"
+          description="Use the initialization response to personalize onboarding, paywalls, offers, or other app content."
+        >
+          {affiliateData ? (
+            <>
+              <KeyValueRow
+                label="Attribution"
+                value={
+                  referralCode
+                    ? `Referral code (${referralCode})`
+                    : 'Affiliate link'
+                }
+              />
+              <KeyValueRow
+                label="Affiliate ID"
+                value={affiliateData.affiliate.id}
+              />
+              <KeyValueRow
+                label="Campaign ID"
+                value={affiliateData.campaign.id}
+              />
+              <KeyValueRow
+                label="Affiliate share"
+                value={
+                  affiliateData.saleDistribution.affiliatePercentage
+                    ? `${affiliateData.saleDistribution.affiliatePercentage}%`
+                    : '—'
+                }
+              />
+              <KeyValueRow label="Referral code" value={referralCode ?? '—'} />
+              {Platform.OS === 'ios' && (
+                <KeyValueRow
+                  label="Apple offer code"
+                  value={offerCode ?? '—'}
+                />
+              )}
+              <Text style={styles.hint}>
+                This device is attributed. A referral code cannot replace the
+                existing attribution.
+              </Text>
+            </>
+          ) : (
+            <MessageView
+              message={info(
+                'No attribution is active. Referral codes remain available as a fallback.',
+              )}
+            />
+          )}
+        </SampleSection>
+
+        {Platform.OS === 'ios' && (
+          <SampleSection
+            badge="iOS feature"
+            title="Apple offer codes"
+            description="Apple subscription offer codes are separate from GoMarketMe referral codes. This opens Apple's redemption flow."
+          >
+            <Text style={styles.hint}>
+              {offerCode
+                ? `Detected offer code: ${offerCode}`
+                : 'No offer code was detected, but users can still enter one manually.'}
+            </Text>
+            <SecondaryButton
+              label="Open Apple offer-code redemption"
+              onPress={redeemOfferCode}
+            />
+          </SampleSection>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 };
 
+type SampleSectionProps = {
+  badge: string;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+};
+
+const SampleSection = ({
+  badge,
+  title,
+  description,
+  children,
+}: SampleSectionProps) => (
+  <View style={styles.card}>
+    <View style={styles.sectionHeading}>
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>{badge}</Text>
+      </View>
+      <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+    <Text style={styles.description}>{description}</Text>
+    <View style={styles.sectionContent}>{children}</View>
+  </View>
+);
+
+type ButtonProps = {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+};
+
+const PrimaryButton = ({
+  label,
+  onPress,
+  disabled = false,
+  loading = false,
+}: ButtonProps) => (
+  <TouchableOpacity
+    accessibilityRole="button"
+    activeOpacity={0.8}
+    disabled={disabled}
+    onPress={onPress}
+    style={[styles.primaryButton, disabled && styles.disabled]}
+  >
+    {loading && <ActivityIndicator color="#FFFFFF" style={styles.spinner} />}
+    <Text style={styles.primaryButtonText}>{label}</Text>
+  </TouchableOpacity>
+);
+
+const SecondaryButton = ({ label, onPress, disabled = false }: ButtonProps) => (
+  <TouchableOpacity
+    accessibilityRole="button"
+    activeOpacity={0.8}
+    disabled={disabled}
+    onPress={onPress}
+    style={[styles.secondaryButton, disabled && styles.disabled]}
+  >
+    <Text style={styles.secondaryButtonText}>{label}</Text>
+  </TouchableOpacity>
+);
+
+const KeyValueRow = ({ label, value }: { label: string; value: string }) => (
+  <View style={styles.keyValueRow}>
+    <Text style={styles.keyLabel}>{label}</Text>
+    <Text selectable style={styles.keyValue}>
+      {value || '—'}
+    </Text>
+  </View>
+);
+
+const MessageView = ({ message }: { message: SampleMessage }) => {
+  const palette = {
+    info: { color: '#1261A0', background: '#E8F3FC' },
+    success: { color: '#087A45', background: '#E7F7EF' },
+    error: { color: '#C62828', background: '#FDECEC' },
+  }[message.kind];
+
+  return (
+    <View style={[styles.message, { backgroundColor: palette.background }]}>
+      <Text style={[styles.messageText, { color: palette.color }]}>
+        {message.text}
+      </Text>
+    </View>
+  );
+};
+
+const nonEmpty = (value?: string | null): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+};
+
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f0f0f0",
+    backgroundColor: '#F4F5F8',
   },
-  title: {
-    fontSize: 22,
-    fontWeight: "bold",
+  content: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 32,
+  },
+  header: {
     marginBottom: 20,
   },
-  button: {
-    backgroundColor: "#007AFF",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+  headerTitle: {
+    color: '#1677FF',
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  headerSubtitle: {
+    color: '#68707C',
+    fontSize: 15,
+    marginTop: 5,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 16,
+    padding: 18,
+  },
+  sectionHeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  badge: {
+    backgroundColor: '#1677FF',
+    borderRadius: 999,
+    marginRight: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sectionTitle: {
+    color: '#161B22',
+    fontSize: 21,
+    fontWeight: '700',
+  },
+  description: {
+    color: '#68707C',
+    fontSize: 15,
+    lineHeight: 21,
+    marginTop: 12,
+  },
+  sectionContent: {
+    marginTop: 16,
+  },
+  statusRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  statusSymbol: {
+    fontSize: 26,
+    fontWeight: '700',
+    textAlign: 'center',
+    width: 28,
+  },
+  statusCopy: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  statusTitle: {
+    color: '#161B22',
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  statusDetail: {
+    color: '#68707C',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  successText: {
+    color: '#0A9A58',
+  },
+  errorText: {
+    color: '#D32F2F',
+  },
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: '#1677FF',
+    borderRadius: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 16,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    borderColor: '#C8CED8',
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: 'center',
+    marginTop: 12,
+    minHeight: 48,
+    paddingHorizontal: 16,
+  },
+  secondaryButtonText: {
+    color: '#1677FF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  spinner: {
+    marginRight: 8,
+  },
+  divider: {
+    backgroundColor: '#E1E4E8',
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 18,
+  },
+  subsectionTitle: {
+    color: '#161B22',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  hint: {
+    color: '#68707C',
+    fontSize: 13,
+    lineHeight: 18,
     marginTop: 10,
   },
-  disabledButton: {
-    opacity: 0.6,
+  message: {
+    borderRadius: 10,
+    marginTop: 12,
+    padding: 10,
   },
-  buttonText: {
-    fontSize: 18,
-    color: "#FFF",
+  messageText: {
+    fontSize: 13,
+    lineHeight: 18,
   },
-  linkButton: {
-    marginTop: 20,
+  keyValueRow: {
+    flexDirection: 'row',
+    paddingVertical: 5,
   },
-  linkText: {
-    fontSize: 16,
-    color: "#007AFF",
-    textDecorationLine: "underline",
+  keyLabel: {
+    color: '#68707C',
+    flex: 1,
+    fontSize: 14,
+  },
+  keyValue: {
+    color: '#161B22',
+    flex: 1,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
+    fontSize: 13,
+    textAlign: 'right',
   },
 });
 
