@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Linking,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -27,6 +29,8 @@ import {
 
 import GoMarketMe, {
   GoMarketMeAffiliateMarketingData,
+  GoMarketMeReferralCodeError,
+  GoMarketMeReferralCodeErrorCode,
   GoMarketMeReferralCodeTrigger,
 } from 'gomarketme-react-native';
 
@@ -59,6 +63,8 @@ const App = () => {
   const [referralMessage, setReferralMessage] = useState<SampleMessage | null>(
     null,
   );
+  const [referralCodeInput, setReferralCodeInput] = useState('');
+  const [isRedeemingReferralCode, setIsRedeemingReferralCode] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -233,6 +239,22 @@ const App = () => {
     }
   };
 
+  const redeemReferralCode = async () => {
+    const code = nonEmpty(referralCodeInput);
+    if (!code || isRedeemingReferralCode) return;
+    setIsRedeemingReferralCode(true);
+    try {
+      const data = await GoMarketMe.redeemReferralCode(code);
+      setAffiliateData(data);
+      setReferralCodeInput('');
+      setReferralMessage(success(`Referral code ${data.referralCode ?? code} applied.`));
+    } catch (error) {
+      setReferralMessage(failure(referralErrorMessage(error)));
+    } finally {
+      setIsRedeemingReferralCode(false);
+    }
+  };
+
   const product = products[0];
   const referralCode = nonEmpty(affiliateData?.referralCode);
   const offerCode = nonEmpty(affiliateData?.offerCode);
@@ -247,9 +269,16 @@ const App = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>GoMarketMe React Native SDK</Text>
+          <View style={styles.headerTitleRow}>
+            <Image
+              accessibilityLabel="GoMarketMe logo"
+              source={require('./assets/gomarketme-logo.png')}
+              style={styles.headerLogo}
+            />
+            <Text style={styles.headerTitle}>GoMarketMe React Native SDK</Text>
+          </View>
           <Text style={styles.headerSubtitle}>
-            Sample integration · SDK 6.0.0
+            Sample integration · SDK 6.0.1
           </Text>
         </View>
 
@@ -314,6 +343,25 @@ const App = () => {
               );
             }}
             onError={error => setReferralMessage(failure(String(error)))}
+          />
+          <View style={styles.divider} />
+          <Text style={styles.subsectionTitle}>Custom referral-code UI</Text>
+          <TextInput
+            autoCapitalize="characters"
+            autoCorrect={false}
+            onChangeText={setReferralCodeInput}
+            placeholder="Referral code"
+            style={styles.textInput}
+            value={referralCodeInput}
+          />
+          <SecondaryButton
+            label={isRedeemingReferralCode ? 'Applying…' : 'Apply referral code'}
+            disabled={
+              initializationState !== 'ready' ||
+              isRedeemingReferralCode ||
+              !nonEmpty(referralCodeInput)
+            }
+            onPress={redeemReferralCode}
           />
           {referralMessage && <MessageView message={referralMessage} />}
           <Text style={styles.hint}>
@@ -380,6 +428,12 @@ const App = () => {
                 label="Campaign ID"
                 value={affiliateData.campaign.id}
               />
+              {nonEmpty(affiliateData.deviceId) && (
+                <KeyValueRow
+                  label="Device ID"
+                  value={affiliateData.deviceId.trim()}
+                />
+              )}
               <KeyValueRow
                 label="Affiliate share"
                 value={
@@ -389,6 +443,18 @@ const App = () => {
                 }
               />
               <KeyValueRow label="Referral code" value={referralCode ?? '—'} />
+              <KeyValueRow
+                label="Campaign metadata"
+                value={metadataJson(affiliateData.campaign.metadata)}
+              />
+              <KeyValueRow
+                label="Affiliate metadata"
+                value={metadataJson(affiliateData.affiliate.metadata)}
+              />
+              <KeyValueRow
+                label="Affiliate campaign metadata"
+                value={metadataJson(affiliateData.affiliateCampaign.metadata)}
+              />
               {Platform.OS === 'ios' && (
                 <KeyValueRow
                   label="Apple offer code"
@@ -523,6 +589,32 @@ const nonEmpty = (value?: string | null): string | undefined => {
   return trimmed ? trimmed : undefined;
 };
 
+const referralErrorMessage = (error: unknown): string => {
+  if (!(error instanceof GoMarketMeReferralCodeError)) {
+    return String(error);
+  }
+  switch (error.code) {
+    case GoMarketMeReferralCodeErrorCode.InvalidCode:
+      return 'That referral code is not valid. Check it and try again.';
+    case GoMarketMeReferralCodeErrorCode.ExpiredCode:
+      return 'That referral code has expired.';
+    case GoMarketMeReferralCodeErrorCode.InactiveCode:
+      return 'That referral code is no longer active.';
+    case GoMarketMeReferralCodeErrorCode.NetworkError:
+    case GoMarketMeReferralCodeErrorCode.Timeout:
+      return 'Could not connect. Check your connection and try again.';
+    case GoMarketMeReferralCodeErrorCode.NotInitialized:
+      return 'Referral codes are not ready yet. Please try again.';
+    default:
+      return error.isRetryable
+        ? 'Could not apply the referral code. Please try again.'
+        : error.message;
+  }
+};
+
+const metadataJson = (metadata: Record<string, unknown>): string =>
+  JSON.stringify(metadata);
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -538,6 +630,15 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 20,
+  },
+  headerTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  headerLogo: {
+    height: 40,
+    marginRight: 10,
+    width: 40,
   },
   headerTitle: {
     color: '#1677FF',
@@ -646,6 +747,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  textInput: {
+    borderColor: '#C8CED8',
+    borderRadius: 10,
+    borderWidth: 1,
+    color: '#161B22',
+    fontSize: 16,
+    marginTop: 10,
+    minHeight: 48,
+    paddingHorizontal: 12,
   },
   disabled: {
     opacity: 0.5,
