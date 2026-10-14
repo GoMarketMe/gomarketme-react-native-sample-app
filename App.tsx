@@ -52,6 +52,10 @@ const App = () => {
   const [initializationState, setInitializationState] =
     useState<InitializationState>('initializing');
   const [initializationError, setInitializationError] = useState<string>();
+  const [configuration, setConfiguration] = useState({
+    appInstallRef: GoMarketMe.appInstallRef,
+    attributionMode: GoMarketMe.attributionMode,
+  });
   const [iapReady, setIapReady] = useState(false);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isPurchased, setIsPurchased] = useState(false);
@@ -85,6 +89,16 @@ const App = () => {
       setInitializationState('ready');
     };
 
+    const unsubscribe = GoMarketMe.subscribe(() => {
+      if (!active) return;
+      setInitializationState(GoMarketMe.initialized ? 'ready' : 'initializing');
+      setAffiliateData(GoMarketMe.affiliateMarketingData ?? null);
+      setConfiguration({
+        appInstallRef: GoMarketMe.appInstallRef,
+        attributionMode: GoMarketMe.attributionMode,
+      });
+    });
+
     initializeGoMarketMe().catch(error => {
       if (active) {
         setInitializationState('error');
@@ -94,6 +108,7 @@ const App = () => {
 
     return () => {
       active = false;
+      unsubscribe();
     };
   }, []);
 
@@ -278,14 +293,14 @@ const App = () => {
             <Text style={styles.headerTitle}>GoMarketMe React Native SDK</Text>
           </View>
           <Text style={styles.headerSubtitle}>
-            Sample integration · SDK 6.0.1
+            Upgraded to GoMarketMe 6.0.2
           </Text>
         </View>
 
         <SampleSection
           badge="Required"
           title="Initialize"
-          description="Initialize once when your app starts. Affiliate-link attribution is handled automatically."
+          description="Initialize when your app starts. Settings refresh automatically when it resumes."
         >
           <View style={styles.statusRow}>
             {initializationState === 'initializing' ? (
@@ -322,10 +337,15 @@ const App = () => {
           </View>
         </SampleSection>
 
+        <SampleSection badge="Configuration" title="Active configuration" description="Mode changes are picked up automatically on app resume.">
+          <KeyValueRow label="App install reference" value={configuration.appInstallRef ?? 'Not loaded'} />
+          <KeyValueRow label="Attribution" value={configuration.attributionMode ?? 'Not loaded'} />
+        </SampleSection>
+
         <SampleSection
-          badge="Optional"
+          badge={configuration.attributionMode === 'ReferralCodesOnly' ? 'Required for referrals' : 'Optional'}
           title="Referral codes"
-          description="Referral codes are the fallback when an affiliate link is not practical. Place this UI on the first screen users see after installing the app."
+          description="Place referral-code entry on the first screen after installation. In Referral Codes Only, users download the app from the neutral page and enter their affiliate’s code here."
         >
           <GoMarketMeReferralCodeTrigger
             onResult={data => {
@@ -428,6 +448,7 @@ const App = () => {
                 label="Campaign ID"
                 value={affiliateData.campaign.id}
               />
+              {!!affiliateData.appInstallRef && <KeyValueRow label="App install reference" value={affiliateData.appInstallRef} />}
               {nonEmpty(affiliateData.deviceId) && (
                 <KeyValueRow
                   label="Device ID"
